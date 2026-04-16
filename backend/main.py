@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Request, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel
+from pydantic import RootModel
 import jwt
 import os
 import asyncpg
@@ -54,10 +54,10 @@ async def verify_jwt(credentials: HTTPAuthorizationCredentials = Depends(securit
         raise HTTPException(status_code=401, detail="Invalid token")
 
 # -----------------------------
-# Intake Payload Model
+# Intake Payload Model (Pydantic v2)
 # -----------------------------
-class IntakePayload(BaseModel):
-    __root__: dict
+class IntakePayload(RootModel[dict]):
+    pass
 
 # -----------------------------
 # SECURE INTAKE ENDPOINT
@@ -89,7 +89,7 @@ async def secure_intake(
     conn = await get_db()
     await conn.execute(
         "INSERT INTO intake_events (payload) VALUES ($1)",
-        payload.__root__
+        payload.root
     )
     await conn.close()
 
@@ -103,7 +103,7 @@ async def me(user=Depends(verify_jwt)):
     return {"status": "authenticated", "user": user}
 
 # -----------------------------
-# Root Route
+# Health Check
 # -----------------------------
 @app.get("/")
 async def root():
