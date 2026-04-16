@@ -5,3 +5,4 @@ pydantic
 python-dotenv
 httpx
 websockets
+PyJWT==2.8.0
