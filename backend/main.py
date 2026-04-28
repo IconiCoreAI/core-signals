@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import RootModel
 import jwt
 import os
@@ -7,6 +8,15 @@ import asyncpg
 from datetime import datetime
 
 app = FastAPI()
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://frontend-hikgyujxe-iconi-core-ai.vercel.app"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # -----------------------------
 # Environment Variables
