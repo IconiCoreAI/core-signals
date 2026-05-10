@@ -1,3 +1,44 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Tailwind v4 core import */
+@import "tailwindcss";
+
+/* ─────────────────────────────────────────────── */
+/*                TAILWIND v4 THEME                */
+/* ─────────────────────────────────────────────── */
+@theme {
+  /* Colors */
+  --color-primary:          #AA3BFF;
+  --color-primary-light:    #F3E8FF;
+  --color-secondary:        #3B82F6;
+  --color-secondary-light:  #E0F2FE;
+  --color-accent:           #FF6BCE;
+  --color-accent-light:     #FFE4F5;
+  --color-success:          #22C55E;
+  --color-warning:          #FACC15;
+  --color-danger:           #EF4444;
+  --color-neutral:          #F8FAFC;
+
+  /* Spacing */
+  --spacing-xs:   4px;
+  --spacing-sm:   8px;
+  --spacing-md:   12px;
+  --spacing-lg:   16px;
+  --spacing-xl:   24px;
+  --spacing-2xl:  32px;
+  --spacing-3xl:  48px;
+
+  /* Border Radius */
+  --radius-sm:   6px;
+  --radius-md:   12px;
+  --radius-lg:   18px;
+  --radius-xl:   24px;
+  --radius-2xl:  32px;
+}
+
+/* ─────────────────────────────────────────────── */
+/*                    BASE LAYER                   */
+/* ─────────────────────────────────────────────── */
+@layer base {
+  * {
+    @apply antialiased;
+  }
+}

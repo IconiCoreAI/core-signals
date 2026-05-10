@@ -1,6 +1,5 @@
 import React from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { motion } from 'framer-motion';
 import { MessageSquare, CreditCard, Box, Bot, CheckCircle, Zap } from 'lucide-react';
 
 const sourceIcons = {
@@ -14,12 +13,7 @@ export default function NotificationCard({ notification, onRead }) {
   const Icon = sourceIcons[notification.source] || <Zap className="w-5 h-5 text-amber-400" />;
 
   return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: -20, scale: 0.95 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.9 }}
-      transition={{ duration: 0.3, type: 'spring', bounce: 0.3 }}
+    <div
       className={`glass-card p-5 rounded-2xl mb-4 transition-all duration-300 ${notification.read ? 'opacity-50' : ''}`}
     >
       <div className="flex items-start gap-4">
@@ -69,6 +63,6 @@ export default function NotificationCard({ notification, onRead }) {
           </div>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }

@@ -21,13 +21,16 @@ export default function RLSTest() {
       setStatus('ok');
       setLastPing(new Date().toLocaleTimeString());
       setProfiles(data || []);
-    } catch (e) {
+    } catch {
       setStatus('error');
     }
   };
 
   useEffect(() => {
-    pingSupabase();
+    const initialize = async () => {
+      await pingSupabase();
+    };
+    initialize();
     const interval = setInterval(pingSupabase, 10000);
     return () => clearInterval(interval);
   }, []);
