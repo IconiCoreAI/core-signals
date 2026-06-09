@@ -1,18 +1,36 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI, Request, Depends, HTTPException, status
+from documents import router as documents_router, create_table as create_documents_table
+from messaging import router as messaging_router, create_table as create_messages_table
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import RootModel
 import jwt
 import os
 import asyncpg
+import httpx
 from datetime import datetime
 
+N8N_WEBHOOK_URL = "https://iconicore.app.n8n.cloud/webhook/zWF0zpfo3iwxhp2Y"
+
+async def notify_n8n(payload: dict):
+    async with httpx.AsyncClient() as client:
+        await client.post(N8N_WEBHOOK_URL, json=payload, timeout=10)
+
 app = FastAPI()
+app.include_router(documents_router)
+app.include_router(messaging_router)
 
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://frontend-hikgyujxe-iconi-core-ai.vercel.app"],
+    allow_origins=[
+        "https://frontend-hikgyujxe-iconi-core-ai.vercel.app",
+        "http://localhost:5173",
+        "http://localhost:4173",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -47,6 +65,8 @@ async def startup_event():
         );
     """)
     await conn.close()
+    await create_documents_table()
+    await create_messages_table()
 
 # -----------------------------
 # JWT Authentication
@@ -103,6 +123,8 @@ async def secure_intake(
     )
     await conn.close()
 
+    await notify_n8n(payload.root)
+
     return {"status": "ok"}
 
 # -----------------------------
@@ -118,3 +140,27 @@ async def me(user=Depends(verify_jwt)):
 @app.get("/")
 async def root():
     return {"status": "running"}
+
+@app.post("/sos")
+async def sos(user=Depends(verify_jwt)):
+    payload = {
+        "type": "sos",
+        "user_id": user.get("sub"),
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+    await notify_n8n(payload)
+    conn = await get_db()
+    await conn.execute("INSERT INTO intake_events (payload) VALUES ($1)", payload)
+    await conn.close()
+    return {"status": "sent"}
+
+
+@app.get("/health")
+async def health():
+    try:
+        conn = await get_db()
+        await conn.fetchval("SELECT 1")
+        await conn.close()
+        return {"status": "ok", "database": "connected"}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Database unavailable: {str(e)}")

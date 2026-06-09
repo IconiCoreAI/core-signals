@@ -6,3 +6,6 @@ python-dotenv
 httpx
 websockets
 PyJWT==2.8.0
+boto3
+cryptography
+python-multipart
