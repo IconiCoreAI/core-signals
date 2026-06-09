@@ -1,14 +1,26 @@
-import supabase from './supabaseClient';
-
 const API_URL = import.meta.env.VITE_API_URL;
 
-async function getToken() {
-  const { data } = await supabase.auth.getSession();
-  return data.session?.access_token;
+export function getToken() {
+  return localStorage.getItem('cs_token');
+}
+
+export function getStoredUser() {
+  const raw = localStorage.getItem('cs_user');
+  return raw ? JSON.parse(raw) : null;
+}
+
+export function saveSession(token, user) {
+  localStorage.setItem('cs_token', token);
+  localStorage.setItem('cs_user', JSON.stringify(user));
+}
+
+export function clearSession() {
+  localStorage.removeItem('cs_token');
+  localStorage.removeItem('cs_user');
 }
 
 export async function apiFetch(path, options = {}) {
-  const token = await getToken();
+  const token = getToken();
   const isFormData = options.body instanceof FormData;
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
@@ -18,6 +30,11 @@ export async function apiFetch(path, options = {}) {
       ...(!isFormData && options.body ? { 'Content-Type': 'application/json' } : {}),
     },
   });
+  if (res.status === 401) {
+    clearSession();
+    window.location.reload();
+    return;
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || `API error ${res.status}`);

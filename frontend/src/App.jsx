@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import supabase from "./supabaseClient";
-import { apiFetch } from "./api";
+import { apiFetch, saveSession, clearSession, getStoredUser, getToken } from "./api";
 
 const COLORS = {
   teal: "#1C9598",
@@ -431,48 +430,34 @@ const s = {
 
 // ─── Auth Screen ────────────────────────────────────────────────────────────
 
-function AuthScreen() {
+function AuthScreen({ onAuth }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
   const [mode, setMode] = useState("signin");
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [signupDone, setSignupDone] = useState(false);
 
   async function submit(e) {
     e.preventDefault();
     setLoading(true);
     setError(null);
     try {
-      if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({ email, password });
-        if (error) throw error;
-        setSignupDone(true);
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-      }
+      const endpoint = mode === "signup" ? "/auth/signup" : "/auth/signin";
+      const body = mode === "signup"
+        ? { email, password, name }
+        : { email, password };
+      const data = await apiFetch(endpoint, {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      saveSession(data.token, data.user);
+      onAuth(data.user);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }
-
-  if (signupDone) {
-    return (
-      <div style={s.authWrap}>
-        <div style={s.authCard}>
-          <p style={s.authLogo}>Core Signals</p>
-          <p style={{ ...s.authSub, fontSize: 14, color: COLORS.black }}>
-            Check your email to confirm your account, then sign in.
-          </p>
-          <button style={s.authBtn} onClick={() => { setMode("signin"); setSignupDone(false); }}>
-            Back to sign in
-          </button>
-        </div>
-      </div>
-    );
   }
 
   return (
@@ -481,6 +466,16 @@ function AuthScreen() {
         <p style={s.authLogo}>Core Signals</p>
         <p style={s.authSub}>where bucket list dreams come true</p>
         <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {mode === "signup" && (
+            <input
+              style={s.authInput}
+              type="text"
+              placeholder="Your name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              autoComplete="name"
+            />
+          )}
           <input
             style={s.authInput}
             type="email"
@@ -584,7 +579,7 @@ function GroupScreen({ session }) {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const bottomRef = useRef(null);
-  const myId = session?.user?.id;
+  const myId = session?.id;
 
   useEffect(() => {
     apiFetch("/messages/group")
@@ -666,7 +661,7 @@ function DocsScreen({ session }) {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
-  const myId = session?.user?.id;
+  const myId = session?.id;
 
   useEffect(() => {
     apiFetch("/documents")
@@ -813,35 +808,20 @@ function HelpScreen() {
 const SCREENS = { home: HomeScreen, group: GroupScreen, docs: DocsScreen, help: HelpScreen };
 
 export default function App() {
-  const [session, setSession] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
+  const [session, setSession] = useState(() => {
+    const user = getStoredUser();
+    const token = getToken();
+    return user && token ? user : null;
+  });
   const [activeTab, setActiveTab] = useState("home");
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setAuthLoading(false);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-    return () => subscription.unsubscribe();
-  }, []);
-
-  async function signOut() {
-    await supabase.auth.signOut();
-  }
-
-  if (authLoading) {
-    return (
-      <div style={{ ...s.authWrap }}>
-        <p style={{ color: COLORS.textGray, fontSize: 14 }}>Loading…</p>
-      </div>
-    );
+  function signOut() {
+    clearSession();
+    setSession(null);
   }
 
   if (!session) {
-    return <AuthScreen />;
+    return <AuthScreen onAuth={setSession} />;
   }
 
   const Screen = SCREENS[activeTab];

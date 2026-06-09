@@ -4,6 +4,7 @@ load_dotenv()
 from fastapi import FastAPI, Request, Depends, HTTPException, status
 from documents import router as documents_router, create_table as create_documents_table
 from messaging import router as messaging_router, create_table as create_messages_table
+from auth import router as auth_router, create_table as create_auth_table
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import RootModel, BaseModel
@@ -23,6 +24,7 @@ async def notify_n8n(payload: dict):
         await client.post(N8N_WEBHOOK_URL, json=payload, timeout=10)
 
 app = FastAPI()
+app.include_router(auth_router)
 app.include_router(documents_router)
 app.include_router(messaging_router)
 
@@ -73,6 +75,7 @@ async def startup_event():
         );
     """)
     await conn.close()
+    await create_auth_table()
     await create_documents_table()
     await create_messages_table()
 

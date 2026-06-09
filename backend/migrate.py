@@ -8,11 +8,12 @@ load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
 SCHEMA = """
 -- Traveler accounts (id maps to JWT 'sub' claim)
 CREATE TABLE IF NOT EXISTS travelers (
-    id          TEXT PRIMARY KEY,
-    email       TEXT UNIQUE NOT NULL,
-    name        TEXT,
-    role        TEXT NOT NULL DEFAULT 'traveler',
-    created_at  TIMESTAMP DEFAULT NOW()
+    id            TEXT PRIMARY KEY,
+    email         TEXT UNIQUE NOT NULL,
+    name          TEXT,
+    role          TEXT NOT NULL DEFAULT 'traveler',
+    password_hash TEXT,
+    created_at    TIMESTAMP DEFAULT NOW()
 );
 
 -- Named group channels
