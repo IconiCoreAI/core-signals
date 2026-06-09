@@ -29,6 +29,7 @@ app.add_middleware(
     allow_origins=[
         "https://frontend-hikgyujxe-iconi-core-ai.vercel.app",
         "https://frontend-still-petal-6011.fly.dev",
+        "https://bali.escapefromrealitytravel.com",
         "http://localhost:5173",
         "http://localhost:4173",
     ],
