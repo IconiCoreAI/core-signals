@@ -6,11 +6,14 @@ from documents import router as documents_router, create_table as create_documen
 from messaging import router as messaging_router, create_table as create_messages_table
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import RootModel
+from pydantic import RootModel, BaseModel
 import jwt
 import os
 import asyncpg
 import httpx
+import asyncio
+import smtplib
+from email.mime.text import MIMEText
 from datetime import datetime
 
 N8N_WEBHOOK_URL = "https://iconicore.app.n8n.cloud/webhook/zWF0zpfo3iwxhp2Y"
@@ -44,6 +47,9 @@ app.add_middleware(
 SECURE_INTAKE_SECRET = os.getenv("SECURE_INTAKE_SECRET", "default_intake_secret")
 JWT_SECRET = os.getenv("JWT_SECRET", "default_jwt_secret")
 DATABASE_URL = os.getenv("DATABASE_URL")
+GMAIL_USER = os.getenv("GMAIL_USER")
+GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD")
+SOS_ALERT_EMAIL = "8038145792@vtext.com"
 
 # -----------------------------
 # Database Connection
@@ -143,17 +149,54 @@ async def me(user=Depends(verify_jwt)):
 async def root():
     return {"status": "running"}
 
+class SOSRequest(BaseModel):
+    name: str = ""
+    level: str = "HIGH"
+
+
+def _send_sos_email(name: str, level: str, timestamp: str):
+    if not GMAIL_USER or not GMAIL_APP_PASSWORD:
+        return
+    body = (
+        f"BALI SOS ALERT\n\n"
+        f"Traveler: {name}\n"
+        f"Level: {level}\n"
+        f"Time: {timestamp} UTC\n\n"
+        f"Immediate assistance required."
+    )
+    msg = MIMEText(body)
+    msg["Subject"] = "🚨 BALI SOS ALERT"
+    msg["From"] = GMAIL_USER
+    msg["To"] = SOS_ALERT_EMAIL
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+        smtp.login(GMAIL_USER, GMAIL_APP_PASSWORD)
+        smtp.send_message(msg)
+
+
 @app.post("/sos")
-async def sos(user=Depends(verify_jwt)):
+async def sos(request: SOSRequest, user=Depends(verify_jwt)):
+    user_email = user.get("email", user.get("sub", "unknown"))
+    name = request.name or user_email
+    timestamp = datetime.utcnow().isoformat()
+
     payload = {
         "type": "sos",
         "user_id": user.get("sub"),
-        "timestamp": datetime.utcnow().isoformat(),
+        "user_email": user_email,
+        "name": name,
+        "level": request.level,
+        "timestamp": timestamp,
     }
     await notify_n8n(payload)
     conn = await get_db()
     await conn.execute("INSERT INTO intake_events (payload) VALUES ($1)", payload)
     await conn.close()
+
+    try:
+        await asyncio.to_thread(_send_sos_email, name, request.level, timestamp)
+    except Exception:
+        pass  # email failure must never block an SOS response
+
     return {"status": "sent"}
 
 

@@ -775,7 +775,7 @@ function HelpScreen() {
     if (!window.confirm("Send emergency SOS? Your travel agent will be alerted immediately.")) return;
     setSending(true);
     try {
-      await apiFetch("/sos", { method: "POST" });
+      await apiFetch("/sos", { method: "POST", body: JSON.stringify({ level: "HIGH" }) });
       setSent(true);
     } catch {
       alert("Could not send SOS signal. Please call emergency services directly.");
