@@ -510,9 +510,79 @@ function AuthScreen({ onAuth }) {
   );
 }
 
+// ─── Change Password Modal ───────────────────────────────────────────────────
+
+function ChangePasswordModal({ onClose }) {
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(false);
+
+  async function submit(e) {
+    e.preventDefault();
+    setError(null);
+    if (next !== confirm) { setError("New passwords don't match"); return; }
+    if (next.length < 8) { setError("New password must be at least 8 characters"); return; }
+    setLoading(true);
+    try {
+      await apiFetch("/auth/change-password", {
+        method: "POST",
+        body: JSON.stringify({ current_password: current, new_password: next }),
+      });
+      setDone(true);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const overlay = {
+    position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.5)",
+    display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100,
+    padding: 24,
+  };
+  const card = {
+    backgroundColor: COLORS.white, borderRadius: 16, padding: 28,
+    width: "100%", maxWidth: 340, display: "flex", flexDirection: "column", gap: 12,
+  };
+
+  if (done) return (
+    <div style={overlay} onClick={onClose}>
+      <div style={card} onClick={e => e.stopPropagation()}>
+        <p style={{ fontSize: 16, fontWeight: 700, color: COLORS.teal, textAlign: "center" }}>Password updated ✓</p>
+        <button style={s.authBtn} onClick={onClose}>Done</button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={overlay} onClick={onClose}>
+      <div style={card} onClick={e => e.stopPropagation()}>
+        <p style={{ fontSize: 16, fontWeight: 700, color: COLORS.black, margin: 0 }}>Change password</p>
+        <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <input style={s.authInput} type="password" placeholder="Current password" value={current}
+            onChange={e => setCurrent(e.target.value)} required autoComplete="current-password" />
+          <input style={s.authInput} type="password" placeholder="New password" value={next}
+            onChange={e => setNext(e.target.value)} required autoComplete="new-password" />
+          <input style={s.authInput} type="password" placeholder="Confirm new password" value={confirm}
+            onChange={e => setConfirm(e.target.value)} required autoComplete="new-password" />
+          {error && <p style={s.authError}>{error}</p>}
+          <button style={s.authBtn} type="submit" disabled={loading}>
+            {loading ? "Updating…" : "Update password"}
+          </button>
+        </form>
+        <button style={s.authToggle} onClick={onClose}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Header ─────────────────────────────────────────────────────────────────
 
-function Header({ onSignOut }) {
+function Header({ onSignOut, onChangePw }) {
   return (
     <>
       <div style={s.header}>
@@ -521,12 +591,20 @@ function Header({ onSignOut }) {
             <p style={s.headerTitle}>{TRIP.name}</p>
             <p style={s.headerDates}>{TRIP.destination} · {TRIP.dates}</p>
           </div>
-          <button
-            onClick={onSignOut}
-            style={{ background: "none", border: "none", color: "rgba(255,255,255,0.7)", fontSize: 12, cursor: "pointer", paddingTop: 2 }}
-          >
-            Sign out
-          </button>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+            <button
+              onClick={onSignOut}
+              style={{ background: "none", border: "none", color: "rgba(255,255,255,0.7)", fontSize: 12, cursor: "pointer", padding: 0 }}
+            >
+              Sign out
+            </button>
+            <button
+              onClick={onChangePw}
+              style={{ background: "none", border: "none", color: "rgba(255,255,255,0.55)", fontSize: 11, cursor: "pointer", padding: 0 }}
+            >
+              Change password
+            </button>
+          </div>
         </div>
       </div>
       <div style={s.tagline}>where bucket list dreams come true</div>
@@ -814,6 +892,7 @@ export default function App() {
     return user && token ? user : null;
   });
   const [activeTab, setActiveTab] = useState("home");
+  const [showChangePw, setShowChangePw] = useState(false);
 
   function signOut() {
     clearSession();
@@ -829,7 +908,8 @@ export default function App() {
 
   return (
     <div style={s.app}>
-      <Header onSignOut={signOut} />
+      {showChangePw && <ChangePasswordModal onClose={() => setShowChangePw(false)} />}
+      <Header onSignOut={signOut} onChangePw={() => setShowChangePw(true)} />
       <div style={s.scrollArea}>
         <Screen {...screenProps} onTabChange={setActiveTab} />
       </div>

@@ -4,7 +4,8 @@ import asyncpg
 import bcrypt
 import jwt
 from datetime import datetime, timedelta
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -13,10 +14,20 @@ JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_DAYS = 30
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+security = HTTPBearer()
 
 
 async def get_db():
     return await asyncpg.connect(DATABASE_URL)
+
+
+async def verify_jwt(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    try:
+        return jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
 
 
 async def create_table():
@@ -101,3 +112,31 @@ async def signin(req: SigninRequest):
         "token": token,
         "user": {"id": row["id"], "email": row["email"], "name": row["name"], "role": row["role"]},
     }
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+@router.post("/change-password")
+async def change_password(req: ChangePasswordRequest, user=Depends(verify_jwt)):
+    if len(req.new_password) < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
+    user_id = user.get("sub")
+    conn = await get_db()
+    row = await conn.fetchrow(
+        "SELECT password_hash FROM travelers WHERE id = $1", user_id
+    )
+    if not row or not row["password_hash"]:
+        await conn.close()
+        raise HTTPException(status_code=404, detail="User not found")
+    if not bcrypt.checkpw(req.current_password.encode(), row["password_hash"].encode()):
+        await conn.close()
+        raise HTTPException(status_code=401, detail="Current password is incorrect")
+    new_hash = bcrypt.hashpw(req.new_password.encode(), bcrypt.gensalt()).decode()
+    await conn.execute(
+        "UPDATE travelers SET password_hash = $1 WHERE id = $2", new_hash, user_id
+    )
+    await conn.close()
+    return {"status": "password updated"}
