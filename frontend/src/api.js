@@ -31,9 +31,13 @@ export async function apiFetch(path, options = {}) {
     },
   });
   if (res.status === 401) {
-    clearSession();
-    window.location.reload();
-    return;
+    if (!path.startsWith('/auth/')) {
+      clearSession();
+      window.location.reload();
+      return;
+    }
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || 'Invalid email or password');
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));

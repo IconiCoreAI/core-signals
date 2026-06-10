@@ -1,10 +1,11 @@
 import os
 import uuid
+import hmac
 import asyncpg
 import bcrypt
 import jwt
 from datetime import datetime, timedelta
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 
@@ -12,6 +13,7 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 JWT_SECRET = os.getenv("JWT_SECRET", "default_jwt_secret")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_DAYS = 30
+ADMIN_RESET_TOKEN = os.getenv("ADMIN_RESET_TOKEN")
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 security = HTTPBearer()
@@ -140,3 +142,32 @@ async def change_password(req: ChangePasswordRequest, user=Depends(verify_jwt)):
     )
     await conn.close()
     return {"status": "password updated"}
+
+
+class AdminResetRequest(BaseModel):
+    email: str
+    new_password: str
+
+
+@router.post("/admin-reset")
+async def admin_reset(req: AdminResetRequest, x_admin_token: str = Header(None)):
+    # Guarded by a shared secret (ADMIN_RESET_TOKEN), not a JWT — Monet runs this
+    # via curl to reset a locked-out traveler. No frontend.
+    if not ADMIN_RESET_TOKEN:
+        raise HTTPException(status_code=503, detail="Admin reset is not configured")
+    if not x_admin_token or not hmac.compare_digest(x_admin_token, ADMIN_RESET_TOKEN):
+        raise HTTPException(status_code=401, detail="Invalid admin token")
+    if len(req.new_password) < 8:
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters")
+
+    new_hash = bcrypt.hashpw(req.new_password.encode(), bcrypt.gensalt()).decode()
+    email = req.email.lower().strip()
+    conn = await get_db()
+    status = await conn.execute(
+        "UPDATE travelers SET password_hash = $1 WHERE email = $2", new_hash, email
+    )
+    await conn.close()
+    if int(status.split()[-1]) == 0:
+        raise HTTPException(status_code=404, detail="Traveler not found")
+    return {"status": "password reset", "email": email}
+

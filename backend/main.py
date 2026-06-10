@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import RootModel, BaseModel
 import jwt
 import os
+import json
 import asyncpg
 import httpx
 import asyncio
@@ -51,7 +52,7 @@ JWT_SECRET = os.getenv("JWT_SECRET", "default_jwt_secret")
 DATABASE_URL = os.getenv("DATABASE_URL")
 GMAIL_USER = os.getenv("GMAIL_USER")
 GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD")
-SOS_ALERT_EMAIL = "8038145792@vtext.com"
+SOS_ALERT_EMAIL = "9124328189@vtext.com"
 
 # -----------------------------
 # Database Connection
@@ -130,13 +131,14 @@ async def secure_intake(
     conn = await get_db()
     await conn.execute(
         "INSERT INTO intake_events (payload) VALUES ($1)",
-        payload.root
+        json.dumps(payload.root)
     )
     await conn.close()
 
     await notify_n8n(payload.root)
 
     return {"status": "ok"}
+
 
 # -----------------------------
 # Protected Route
@@ -192,7 +194,7 @@ async def sos(request: SOSRequest, user=Depends(verify_jwt)):
     }
     await notify_n8n(payload)
     conn = await get_db()
-    await conn.execute("INSERT INTO intake_events (payload) VALUES ($1)", payload)
+    await conn.execute("INSERT INTO intake_events (payload) VALUES ($1)", json.dumps(payload))
     await conn.close()
 
     try:
