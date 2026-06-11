@@ -60,7 +60,7 @@ async def list_travelers(x_its_key: str = Header(None)):
                created_at AS signup_date,
                last_seen
         FROM travelers
-        WHERE role != 'admin'
+        WHERE COALESCE(role, 'traveler') != 'admin'
         ORDER BY name NULLS LAST, email
         """
     )
