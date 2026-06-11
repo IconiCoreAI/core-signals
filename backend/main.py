@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request, Depends, HTTPException, status
 from documents import router as documents_router, create_table as create_documents_table
 from messaging import router as messaging_router, create_table as create_messages_table
 from auth import router as auth_router, create_table as create_auth_table
+from admin_api import router as admin_router
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import RootModel, BaseModel
@@ -28,6 +29,7 @@ app = FastAPI()
 app.include_router(auth_router)
 app.include_router(documents_router)
 app.include_router(messaging_router)
+app.include_router(admin_router)
 
 # Configure CORS
 app.add_middleware(
@@ -145,6 +147,11 @@ async def secure_intake(
 # -----------------------------
 @app.get("/me")
 async def me(user=Depends(verify_jwt)):
+    conn = await get_db()
+    await conn.execute(
+        "UPDATE travelers SET last_seen = NOW() WHERE id = $1", user.get("sub")
+    )
+    await conn.close()
     return {"status": "authenticated", "user": user}
 
 # -----------------------------

@@ -48,6 +48,11 @@ async def create_table():
     await conn.execute(
         "ALTER TABLE travelers ADD COLUMN IF NOT EXISTS password_hash TEXT;"
     )
+    # last_seen: stamped by /auth/signin and /me, read by /admin/travelers
+    # (ITS integration). Also in db/migrations/0016_traveler_last_seen.sql.
+    await conn.execute(
+        "ALTER TABLE travelers ADD COLUMN IF NOT EXISTS last_seen TIMESTAMP;"
+    )
     await conn.close()
 
 
@@ -109,6 +114,11 @@ async def signin(req: SigninRequest):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     if not bcrypt.checkpw(req.password.encode(), row["password_hash"].encode()):
         raise HTTPException(status_code=401, detail="Invalid email or password")
+    conn = await get_db()
+    await conn.execute(
+        "UPDATE travelers SET last_seen = NOW() WHERE id = $1", row["id"]
+    )
+    await conn.close()
     token = _make_token(row["id"], row["email"], row["role"])
     return {
         "token": token,
