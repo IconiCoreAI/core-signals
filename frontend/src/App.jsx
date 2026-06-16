@@ -1029,7 +1029,7 @@ function HelpScreen() {
       <p style={s.helpNote}>
         {sent
           ? "Your SOS has been sent. Your travel agent has been alerted and help is on the way."
-          : "Press SOS to immediately alert your travel agent and share your location with emergency services."}
+          : "Press SOS to immediately alert your travel agent. For life-threatening emergencies, call local emergency services directly."}
       </p>
     </div>
   );
