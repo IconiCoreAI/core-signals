@@ -154,6 +154,25 @@ async def change_password(req: ChangePasswordRequest, user=Depends(verify_jwt)):
     return {"status": "password updated"}
 
 
+class UpdateNameRequest(BaseModel):
+    name: str
+
+
+@router.patch("/update-name")
+async def update_name(req: UpdateNameRequest, user=Depends(verify_jwt)):
+    name = req.name.strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name cannot be empty")
+    user_id = user.get("sub")
+    conn = await get_db()
+    row = await conn.fetchrow(
+        "UPDATE travelers SET name = $1 WHERE id = $2 RETURNING id, email, name, role",
+        name, user_id,
+    )
+    await conn.close()
+    return {"id": row["id"], "email": row["email"], "name": row["name"], "role": row["role"]}
+
+
 class AdminResetRequest(BaseModel):
     email: str
     new_password: str

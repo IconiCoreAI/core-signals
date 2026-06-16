@@ -4,31 +4,36 @@ Travel companion app for Escape From Reality group trips. Live at **https://bali
 
 ---
 
-## Live Status (June 10, 2026)
+## Live Status (June 16, 2026)
 
 - App live at `bali.escapefromrealitytravel.com` and `frontend-still-petal-6011.fly.dev`
 - Backend live at `backend-little-leaf-7896.fly.dev`
 - Custom domain DNS verified via Namecheap A + AAAA records
 - Auth: Neon + FastAPI JWT + bcrypt (Supabase fully removed)
-- Database: `ep-divine-smoke` (Neon) — all 9 travelers migrated here, ep-dry-boat retired
-- 9 traveler accounts created, password `Bali2026!`, all confirmed in ep-divine-smoke
-- Bali Travel Guide PDF uploaded to R2, registered as `trip_doc`, `visible_to_all=TRUE`
-- Master Operations sheet hidden from travelers (`visible_to_all=FALSE`)
+- Database: `ep-divine-smoke` (Neon) — all 9 travelers confirmed
+- 9 traveler accounts, temporary password `Bali2026!`
+- R2 bucket `efr-travel-docs` is **PRIVATE** — all documents served via 1-hour presigned URLs
+- Token `efr-travel-docs-token-2` (Object Read + Write) signs presigned GET URLs
+- Trip documents visible to all travelers: Bali Travel Guide PDF (id=1), Mulia Bali Lunch Confirmation (id=4)
 - SOS working via Gmail SMTP + vtext gateway (Verizon) to `9124328189@vtext.com`
 - Admin-reset endpoint live at `POST /auth/admin-reset`, secured with `ADMIN_RESET_TOKEN`
-- Forgot-password flow parked — remove after Firebase migration post June 15
+- PWA manifest live — travelers can install via "Add to Home Screen" (Safari/Chrome)
 - Tab title: `Bali Retirement Trip | Escape From Reality Travel`
 - Favicon: EFR R logo (white background)
-- Change password: working via in-app header link
+- Change password + Change name: both working via in-app header links
+- Group chat shows traveler first names (joined from travelers table)
 
 ---
 
 ## Security Notes
 
-- Both Gmail app passwords (`GMAIL_APP_PASSWORD` and `CONTACT_GMAIL_APP_PASSWORD`) were exposed in Claude Code chat during a prior session
-- Both were regenerated and updated using `read -s PASS` in plain Mac terminal so the value was never visible in any terminal or chat
-- `ADMIN_RESET_TOKEN` was also exposed in chat during June 10 session — regenerate and update Fly secret before next use
+- All secrets managed via `read -s` in plain Mac terminal — values never visible in terminal or chat
+- `JWT_SECRET` and `FERNET_KEY` are **NOT** in Fly secrets — backend uses hardcoded defaults. Accepted by Monet for now (sole operator, private access). Set before any multi-user admin access is added.
+- `ADMIN_RESET_TOKEN` was exposed in June 10 chat — regenerate before next use
+- June 10 evening: full `backend/.env` was read into chat. Credentials needing rotation before June 24 launch: Neon `DATABASE_URL` password, `JWT_SECRET`, `FERNET_KEY`, `R2_ACCESS_KEY_ID`/`R2_SECRET_ACCESS_KEY`, `CONTACT_GMAIL_APP_PASSWORD`, `ADMIN_RESET_TOKEN`
+- ITS project does NOT share this project's Neon database or credentials — separate Neon project at `~/its/CLAUDE.md`
 - `.env` is gitignored, secrets are never committed to the repo
+- `admin_access_granted` field exists on documents table but is NOT yet enforced in the download endpoint — admin can currently open any traveler's personal document. Fix is: check `admin_access_granted` in `GET /documents/{id}/download` before generating presigned URL.
 
 ---
 
@@ -39,7 +44,7 @@ Travel companion app for Escape From Reality group trips. Live at **https://bali
 | Frontend | React 19 + Vite 8 + Tailwind 4 | Fly.io (`frontend-still-petal-6011`) |
 | Backend | FastAPI + uvicorn | Fly.io (`backend-little-leaf-7896`) |
 | Database | Neon (Postgres) | `ep-divine-smoke-apn08le7.c-7.us-east-1.aws.neon.tech` |
-| File storage | Cloudflare R2 | bucket `efr-travel-docs` |
+| File storage | Cloudflare R2 | bucket `efr-travel-docs` (private) |
 | Notifications | n8n webhook | `iconicore.app.n8n.cloud` |
 
 ---
@@ -50,10 +55,10 @@ Travel companion app for Escape From Reality group trips. Live at **https://bali
 core-signals/
 backend/
     main.py              FastAPI app, CORS, JWT verify, /sos, /health
-    auth.py              /auth/signup, /auth/signin, /auth/change-password, /auth/admin-reset
+    auth.py              /auth/signup, /auth/signin, /auth/change-password, /auth/update-name, /auth/admin-reset
     documents.py         GET /documents, POST /documents/trip|personal, GET /documents/{id}/download
-    messaging.py         GET|POST /messages/group, GET|POST /messages/private
-    r2.py                Cloudflare R2 upload/download/delete helpers
+    messaging.py         GET|POST /messages/group (includes sender_name join), GET|POST /messages/private
+    r2.py                Cloudflare R2 upload/presigned-URL/delete helpers
     migrate.py           One-shot schema migration (run manually)
     send_welcome.py      Gmail SMTP welcome email script (dry run default, --send to deliver)
     upload_trip_docs.py  One-shot script to register R2 docs in Neon
@@ -67,6 +72,8 @@ frontend/
         main.jsx
     public/
         favicon.png      EFR R logo
+        manifest.json    PWA manifest — enables Add to Home Screen
+    index.html           PWA meta tags (apple-mobile-web-app-*, theme-color, manifest link)
     Dockerfile           Multi-stage: node:20-slim build + gostatic serve
     fly.toml             app: frontend-still-petal-6011, region: iad
     package.json
@@ -82,8 +89,9 @@ frontend/
 - Users live in the `travelers` table in Neon (`id TEXT, email TEXT, name TEXT, role TEXT, password_hash TEXT`).
 - `role = 'admin'` unlocks trip document upload and full document list.
 - Admin password reset (no frontend): `POST /auth/admin-reset` with `X-Admin-Token` header.
+- Name change: `PATCH /auth/update-name` with `{name}` — updates DB and returns updated user object for localStorage refresh.
 
-> **Planned:** Migrate auth to Firebase after June 15, 2026. Touch points: `auth.py`, `api.js`, `App.jsx` AuthScreen, `verify_jwt` in `main.py`. Forgot-password code is parked and should be removed once Firebase is live.
+> **Planned:** Migrate auth to Firebase after June 15, 2026 (now deferred). Touch points: `auth.py`, `api.js`, `App.jsx` AuthScreen, `verify_jwt` in `main.py`.
 
 ---
 
@@ -101,29 +109,32 @@ frontend/
 | Cynthia Franklin | cfrankamis@gmail.com | traveler |
 | Judy Jackson | jackson.jj0507@gmail.com | traveler |
 
-All accounts use temporary password `Bali2026!`. Travelers are prompted to change it on first login.
+Note: Carla Kirkland travels with the group but has no email address and no app account. She receives information through other travelers.
+
+All accounts use temporary password `Bali2026!`. Travelers can change name and password via in-app header links.
 
 ---
 
 ## Backend Env Vars (Fly Secrets)
 
-| Var | Purpose |
-|---|---|
-| `DATABASE_URL` | Neon ep-divine-smoke connection string |
-| `JWT_SECRET` | HS256 signing key |
-| `FERNET_KEY` | Symmetric encryption for private messages |
-| `GMAIL_USER` | `monetplanter@gmail.com` — SOS email sender |
-| `GMAIL_APP_PASSWORD` | Gmail app password for GMAIL_USER — regenerated June 10 |
-| `CONTACT_GMAIL_USER` | `contact@escapefromrealitytravelers.com` — welcome emails and SOS |
-| `CONTACT_GMAIL_APP_PASSWORD` | Gmail app password for CONTACT_GMAIL_USER — regenerated June 10 |
-| `ADMIN_RESET_TOKEN` | Shared secret for `/auth/admin-reset` — regenerate before next use |
-| `R2_ACCOUNT_ID` | Cloudflare R2 |
-| `R2_ACCESS_KEY_ID` | Cloudflare R2 |
-| `R2_SECRET_ACCESS_KEY` | Cloudflare R2 |
-| `R2_BUCKET_NAME` | `efr-travel-docs` |
-| `R2_ENDPOINT` | R2 S3-compatible endpoint |
-| `SECURE_INTAKE_SECRET` | Shared secret for `/secure-intake` webhook |
-| `APP_BASE_URL` | `https://bali.escapefromrealitytravel.com` |
+Confirmed deployed as of June 16, 2026:
+
+| Var | Status | Purpose |
+|---|---|---|
+| `DATABASE_URL` | Deployed | Neon ep-divine-smoke connection string |
+| `GMAIL_USER` | Deployed | `monetplanter@gmail.com` — SOS email sender |
+| `GMAIL_APP_PASSWORD` | Deployed | Gmail app password for GMAIL_USER |
+| `CONTACT_GMAIL_USER` | Deployed | `contact@escapefromrealitytravelers.com` |
+| `CONTACT_GMAIL_APP_PASSWORD` | Deployed | Gmail app password for CONTACT_GMAIL_USER |
+| `ADMIN_RESET_TOKEN` | Deployed | Shared secret for `/auth/admin-reset` — regenerate before next use |
+| `BALI_API_KEY` | Deployed | Used by admin_api.py — constant-time compare auth |
+| `R2_ACCOUNT_ID` | Deployed | Cloudflare account ID — also builds R2_ENDPOINT automatically |
+| `R2_ACCESS_KEY_ID` | Deployed | efr-travel-docs-token-2 key |
+| `R2_SECRET_ACCESS_KEY` | Deployed | efr-travel-docs-token-2 secret |
+| `R2_BUCKET_NAME` | Deployed | `efr-travel-docs` |
+| `JWT_SECRET` | **NOT SET** | Falls back to `"default_jwt_secret"` — accepted by Monet |
+| `FERNET_KEY` | **NOT SET** | Private messages raise 500 if called — feature not in active use |
+| `R2_ENDPOINT` | **NOT SET** | Constructed automatically: `https://{R2_ACCOUNT_ID}.r2.cloudflarestorage.com` |
 
 ---
 
@@ -134,16 +145,71 @@ All accounts use temporary password `Bali2026!`. Travelers are prompted to chang
 | POST | `/auth/signup` | None | `{email, password, name}` returns `{token, user}` |
 | POST | `/auth/signin` | None | `{email, password}` returns `{token, user}` |
 | POST | `/auth/change-password` | JWT | `{current_password, new_password}` |
+| PATCH | `/auth/update-name` | JWT | `{name}` — updates travelers table, returns updated user |
 | POST | `/auth/admin-reset` | X-Admin-Token header | `{email, new_password}` — Monet only, no frontend |
 | GET | `/documents` | JWT | Trip docs (visible_to_all) + caller's personal docs |
 | POST | `/documents/personal` | JWT | Multipart upload to R2 |
 | POST | `/documents/trip` | JWT admin | Multipart upload to R2 |
-| GET | `/documents/{id}/download` | JWT | Returns 1-hour presigned R2 URL |
-| GET | `/messages/group` | JWT | All group messages, ASC |
+| GET | `/documents/{id}/download` | JWT | Returns 1-hour presigned R2 URL — checks owner or visible_to_all |
+| GET | `/messages/group` | JWT | All group messages ASC, includes `sender_name` |
 | POST | `/messages/group` | JWT | Send group message |
 | POST | `/sos` | JWT | Fires n8n webhook + Gmail SMTP to `9124328189@vtext.com` |
 | POST | `/secure-intake` | Secret | n8n inbound webhook |
 | GET | `/health` | None | `{status, database}` |
+
+---
+
+## Document Serving (R2)
+
+Bucket `efr-travel-docs` is **private** — public access is disabled by design (travelers have personal docs like visas that must not be world-readable).
+
+Flow:
+1. `GET /documents` returns document metadata (id, filename, type) — no URLs
+2. Traveler taps "Open" → frontend calls `GET /documents/{id}/download`
+3. Backend verifies JWT, checks `is_admin OR uploaded_by == user OR visible_to_all`
+4. If authorized: calls `generate_presigned_url(key, expires_in=3600)` via boto3
+5. Returns `{url, expires_in: 3600}` — frontend opens in new tab
+6. URL is valid for 1 hour, signed with efr-travel-docs-token-2 credentials
+
+**Admin access gap (known):** `admin_access_granted` field exists in documents table but the download endpoint does not check it. Admin can currently generate presigned URLs for any document including travelers' personal files. Fix: add `admin_access_granted` check in `documents.py` download endpoint.
+
+---
+
+## Trip Documents (database state as of June 16, 2026)
+
+| id | Filename | Type | Visible to all |
+|---|---|---|---|
+| 1 | Pam Retirement Bali 2026 Travel Guide .pdf | trip_doc | YES |
+| 4 | Mulia Bali Lunch Confirmation.pdf | trip_doc | YES |
+
+Cynthia Franklin has 1 personal document (Visa Indonesia.pdf, id=2). All other travelers have 0 personal docs.
+
+---
+
+## Hotel & Transfers Screen
+
+Accessible from Home > Quick Access > "Hotel & transfers". Shows:
+
+- **Hotel:** Taman Dharmawangsa Suites
+- **Room:** Two Bedroom Pool Villa, Daily Breakfast Included
+- **Address:** Jl. Astina Pura No.1, Jl. Raya Kampial, Nusa Dua, Benoa, Kecamatan Kuta Selatan, Badung, Bali, Indonesia 80361
+- **Phone/WhatsApp:** +62 81 138 017 999
+
+Airport pickups:
+- June 23: Francine Applewhite + Lorine Hall / Korean Airlines KE633, ETA 11:50pm / 1x MPV
+- June 24 (CX783 5:40pm): Pam, Cindy, Veronica, Carla, Lourdes, Tiana, Judy / 2x MPV
+- June 24 (SQ938 12:00pm): Cynthia Franklin / 1x MPV
+- Note: Driver meets at arrival gate. Transfer trouble: WhatsApp +62 81 138 017 999
+
+---
+
+## PWA Install Instructions (for travelers)
+
+**iPhone:** Safari → bali.escapefromrealitytravel.com → Share button → "Add to Home Screen" → Add
+
+**Android:** Chrome → same URL → three dots menu → "Add to Home Screen"
+
+App installs with teal EFR icon, opens fullscreen, no browser bar. No App Store required.
 
 ---
 
@@ -158,8 +224,6 @@ allow_origins=[
     "http://localhost:4173",
 ]
 ```
-
-Add new origins here and redeploy the backend whenever a new frontend URL is introduced.
 
 ---
 
@@ -182,15 +246,17 @@ cd backend && flyctl deploy
 # Frontend
 cd frontend && flyctl deploy
 
-# Both sequential
-cd backend && flyctl deploy && cd ../frontend && flyctl deploy
+# Both in parallel (from repo root)
+flyctl deploy & cd frontend && flyctl deploy
 ```
 
-Frontend Dockerfile does a full `npm ci && npm run build` inside Docker. No local build needed before deploy. `.dockerignore` excludes `node_modules` and `.git`.
+Frontend Dockerfile does a full `npm ci && npm run build` inside Docker. No local build needed before deploy.
 
 ---
 
 ## Local Dev
+
+Local `.env` credentials are stale as of June 16 — R2 and DATABASE_URL no longer match Fly secrets. Use the live API or fly ssh for any database/R2 operations.
 
 ```bash
 # Backend
@@ -199,8 +265,6 @@ cd backend && source venv/bin/activate && uvicorn main:app --reload --port 8000
 # Frontend
 cd frontend && npm run dev   # http://localhost:5173
 ```
-
-Frontend `.env` points `VITE_API_URL` at the live Fly backend. For local backend testing change it to `http://localhost:8000`.
 
 ---
 
@@ -215,9 +279,32 @@ curl -X POST https://backend-little-leaf-7896.fly.dev/auth/admin-reset \
 
 ---
 
+## One-Shot DB/R2 Operations via Fly SSH
+
+Local `.env` is stale. For direct DB queries or R2 uploads use fly ssh:
+
+```bash
+# Wake the backend
+curl -s https://backend-little-leaf-7896.fly.dev/health
+
+# Open SSH shell
+flyctl ssh console -a backend-little-leaf-7896
+
+# Transfer a file to the machine
+flyctl ssh sftp shell -a backend-little-leaf-7896
+# then: put /local/path /tmp/filename
+
+# Run a script (reads credentials from uvicorn process /proc environ)
+flyctl ssh console -a backend-little-leaf-7896 -C "python3 /tmp/script.py"
+```
+
+Scripts running on the fly machine should read credentials from the uvicorn process environment (scan `/proc/*/environ` for `R2_BUCKET_NAME` to find the right PID).
+
+---
+
 ## SOS Flow
 
-1. Traveler taps SOS in app and confirms the dialog
+1. Traveler taps SOS and confirms the dialog
 2. App calls `POST /sos` with `{level: "HIGH"}`
 3. Backend fires n8n webhook (async, non-blocking)
 4. Backend sends Gmail SMTP email to `9124328189@vtext.com` (Verizon SMS gateway)
@@ -227,21 +314,9 @@ curl -X POST https://backend-little-leaf-7896.fly.dev/auth/admin-reset \
 
 ## Database Schema (migrate.py)
 
-Run `python migrate.py` from `backend/` to apply. Safe to re-run (all `CREATE TABLE IF NOT EXISTS` + `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`).
+Run `python migrate.py` from `backend/` to apply. Safe to re-run.
 
 Tables: `travelers`, `channels`, `channel_members`, `messages`, `private_threads`, `private_messages`, `documents`, `triage_log`, `intake_events`, `notifications`.
-
----
-
-## Three Terminal Workflow (June 10, 2026)
-
-Work was split across three parallel Claude Code terminals:
-
-- **Terminal 1**: Backend work including auth fixes, database migration, admin-reset endpoint, SOS fixes, traveler password resets, git commits, and deploys
-- **Terminal 2**: Frontend work including favicon, tab title, document type fixes, and database corrections
-- **Terminal 3**: Deep investigation including diagnosing login failures, DB queries, and planning forgot-password flow
-
-All three terminals shared the same Neon database and Fly.io deployment target. Missy coordinated flow, Daniel reviewed security before each commit, Martin and Lilly executed builds.
 
 ---
 
@@ -268,9 +343,11 @@ All three terminals shared the same Neon database and Fly.io deployment target. 
 
 ---
 
-## Open Items (before June 24 launch)
+## Open Items
 
-- Test all 9 traveler logins with Pam's group on live webinar
-- Regenerate `ADMIN_RESET_TOKEN` (was visible in chat June 10) and update Fly secret
+- Enforce `admin_access_granted` in `GET /documents/{id}/download` — admin currently bypasses, sees all personal docs
+- Set `JWT_SECRET` and `FERNET_KEY` as Fly secrets before any multi-admin use or before enabling private messages
+- Regenerate `ADMIN_RESET_TOKEN` (exposed in June 10 chat) and update Fly secret before next use
+- Firebase auth migration deferred — remove parked forgot-password code when Firebase goes live
 - Twilio parked until budget allows. SOS uses vtext gateway for now.
-- Firebase auth migration scheduled post June 15. See auth section for touch points.
+- Test all 9 traveler logins at live webinar June 24

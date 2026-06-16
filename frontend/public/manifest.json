@@ -1,0 +1,17 @@
+{
+  "name": "Bali Retirement Trip",
+  "short_name": "Bali Trip",
+  "description": "Escape From Reality Travel — Bali Retirement Trip",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1C9598",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

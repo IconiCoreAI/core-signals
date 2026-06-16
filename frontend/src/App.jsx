@@ -510,6 +510,71 @@ function AuthScreen({ onAuth }) {
   );
 }
 
+// ─── Change Name Modal ───────────────────────────────────────────────────────
+
+function ChangeNameModal({ session, onClose, onSave }) {
+  const [name, setName] = useState(session?.name || "");
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(false);
+
+  const overlay = {
+    position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.5)",
+    display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100, padding: 24,
+  };
+  const card = {
+    backgroundColor: COLORS.white, borderRadius: 16, padding: 28,
+    width: "100%", maxWidth: 340, display: "flex", flexDirection: "column", gap: 12,
+  };
+
+  async function submit(e) {
+    e.preventDefault();
+    setError(null);
+    const trimmed = name.trim();
+    if (!trimmed) { setError("Name cannot be empty"); return; }
+    setLoading(true);
+    try {
+      const updated = await apiFetch("/auth/update-name", {
+        method: "PATCH",
+        body: JSON.stringify({ name: trimmed }),
+      });
+      saveSession(getToken(), updated);
+      onSave(updated);
+      setDone(true);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (done) return (
+    <div style={overlay} onClick={onClose}>
+      <div style={card} onClick={e => e.stopPropagation()}>
+        <p style={{ fontSize: 16, fontWeight: 700, color: COLORS.teal, textAlign: "center" }}>Name updated ✓</p>
+        <button style={s.authBtn} onClick={onClose}>Done</button>
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={overlay} onClick={onClose}>
+      <div style={card} onClick={e => e.stopPropagation()}>
+        <p style={{ fontSize: 16, fontWeight: 700, color: COLORS.black, margin: 0 }}>Change display name</p>
+        <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <input style={s.authInput} type="text" placeholder="Your name" value={name}
+            onChange={e => setName(e.target.value)} required autoComplete="name" />
+          {error && <p style={s.authError}>{error}</p>}
+          <button style={s.authBtn} type="submit" disabled={loading}>
+            {loading ? "Saving…" : "Save name"}
+          </button>
+        </form>
+        <button style={s.authToggle} onClick={onClose}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Change Password Modal ───────────────────────────────────────────────────
 
 function ChangePasswordModal({ onClose }) {
@@ -582,7 +647,7 @@ function ChangePasswordModal({ onClose }) {
 
 // ─── Header ─────────────────────────────────────────────────────────────────
 
-function Header({ onSignOut, onChangePw }) {
+function Header({ onSignOut, onChangePw, onChangeName }) {
   return (
     <>
       <div style={s.header}>
@@ -604,6 +669,12 @@ function Header({ onSignOut, onChangePw }) {
             >
               Change password
             </button>
+            <button
+              onClick={onChangeName}
+              style={{ background: "none", border: "none", color: "rgba(255,255,255,0.55)", fontSize: 11, cursor: "pointer", padding: 0 }}
+            >
+              Change name
+            </button>
           </div>
         </div>
       </div>
@@ -612,12 +683,95 @@ function Header({ onSignOut, onChangePw }) {
   );
 }
 
+// ─── Hotel & Transfers Screen ─────────────────────────────────────────────────
+
+function HotelScreen({ onTabChange }) {
+  return (
+    <div style={{ paddingBottom: 8 }}>
+      <div style={{ padding: "12px 16px 0" }}>
+        <button
+          onClick={() => onTabChange("home")}
+          style={{ background: "none", border: "none", color: COLORS.teal, fontSize: 15, cursor: "pointer", padding: 0, fontWeight: 600 }}
+        >
+          ← Back
+        </button>
+      </div>
+
+      <div style={{ margin: "12px 16px 0", borderRadius: 14, backgroundColor: COLORS.caramel, padding: 20, color: COLORS.white, boxShadow: "0 4px 12px rgba(179,125,91,0.25)" }}>
+        <p style={{ fontSize: 18, fontWeight: 700, margin: "0 0 6px" }}>Taman Dharmawangsa Suites</p>
+        <p style={{ fontSize: 13, opacity: 0.9, margin: 0 }}>Two Bedroom Pool Villa · Daily Breakfast Included</p>
+      </div>
+
+      <div style={{ margin: "12px 16px 0", borderRadius: 12, border: `1px solid ${COLORS.borderGray}`, overflow: "hidden" }}>
+        <div style={{ padding: "14px 16px", borderBottom: `1px solid ${COLORS.borderGray}` }}>
+          <p style={{ fontSize: 12, fontWeight: 600, color: COLORS.textGray, textTransform: "uppercase", letterSpacing: "0.06em", margin: "0 0 6px" }}>Address</p>
+          <p style={{ fontSize: 14, color: COLORS.black, margin: 0, lineHeight: 1.6 }}>
+            Jl. Astina Pura No.1, Jl. Raya Kampial<br />
+            Nusa Dua, Benoa, Kecamatan Kuta Selatan<br />
+            Badung, Bali, Indonesia 80361
+          </p>
+        </div>
+        <div style={{ padding: "14px 16px" }}>
+          <p style={{ fontSize: 12, fontWeight: 600, color: COLORS.textGray, textTransform: "uppercase", letterSpacing: "0.06em", margin: "0 0 6px" }}>Phone &amp; WhatsApp</p>
+          <a href="tel:+6281138017999" style={{ fontSize: 14, color: COLORS.caramel, textDecoration: "none", fontWeight: 600 }}>
+            +62 81 138 017 999
+          </a>
+        </div>
+      </div>
+
+      <p style={{ ...s.sectionLabel, marginTop: 20 }}>Airport pickups</p>
+
+      <div style={{ margin: "0 16px 12px", borderRadius: 12, border: `1px solid ${COLORS.borderGray}`, overflow: "hidden" }}>
+        <div style={{ backgroundColor: COLORS.purple, padding: "10px 16px" }}>
+          <p style={{ color: COLORS.white, fontSize: 14, fontWeight: 700, margin: 0 }}>June 23, 2026</p>
+        </div>
+        <div style={{ padding: "14px 16px" }}>
+          <p style={{ fontSize: 12, fontWeight: 600, color: COLORS.textGray, textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 6px" }}>Korean Airlines KE633 · ETA 11:50pm</p>
+          <p style={{ fontSize: 14, color: COLORS.black, margin: "0 0 6px" }}>Francine Applewhite, Lorine Hall</p>
+          <p style={{ fontSize: 12, color: COLORS.textGray, margin: 0 }}>1x MPV Car</p>
+        </div>
+      </div>
+
+      <div style={{ margin: "0 16px 12px", borderRadius: 12, border: `1px solid ${COLORS.borderGray}`, overflow: "hidden" }}>
+        <div style={{ backgroundColor: COLORS.purple, padding: "10px 16px" }}>
+          <p style={{ color: COLORS.white, fontSize: 14, fontWeight: 700, margin: 0 }}>June 24, 2026</p>
+        </div>
+        <div style={{ padding: "14px 16px", borderBottom: `1px solid ${COLORS.borderGray}` }}>
+          <p style={{ fontSize: 12, fontWeight: 600, color: COLORS.textGray, textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 6px" }}>Cathay Pacific CX783 · ETA 5:40pm</p>
+          <p style={{ fontSize: 14, color: COLORS.black, margin: "0 0 6px", lineHeight: 1.5 }}>
+            Pamela Washington, Cindy Notti, Veronica Barnes,{" "}
+            Carla Kirkland, Lourdes Bernal, Tiana Towns, Judy Jackson
+          </p>
+          <p style={{ fontSize: 12, color: COLORS.textGray, margin: 0 }}>2x MPV Car</p>
+        </div>
+        <div style={{ padding: "14px 16px" }}>
+          <p style={{ fontSize: 12, fontWeight: 600, color: COLORS.textGray, textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 6px" }}>Singapore Airlines SQ938 · ETA 12:00pm</p>
+          <p style={{ fontSize: 14, color: COLORS.black, margin: "0 0 6px" }}>Cynthia A. Franklin</p>
+          <p style={{ fontSize: 12, color: COLORS.textGray, margin: 0 }}>1x MPV Car</p>
+        </div>
+      </div>
+
+      <div style={{ margin: "0 16px 20px", borderRadius: 12, backgroundColor: "#FFF8F4", border: `1px solid ${COLORS.caramel}`, padding: "14px 16px" }}>
+        <p style={{ fontSize: 13, fontWeight: 700, color: COLORS.caramel, margin: "0 0 4px" }}>Your driver meets you at the arrival gate</p>
+        <p style={{ fontSize: 13, color: COLORS.textGray, margin: "0 0 10px" }}>Transfer trouble? WhatsApp the hotel directly:</p>
+        <a href="https://wa.me/6281138017999" style={{ fontSize: 15, color: COLORS.caramel, textDecoration: "none", fontWeight: 700 }}>
+          +62 81 138 017 999
+        </a>
+      </div>
+    </div>
+  );
+}
+
 // ─── Home Screen ─────────────────────────────────────────────────────────────
 
 function HomeScreen({ onTabChange }) {
   const quickWithNav = QUICK_ACCESS.map((item) => ({
     ...item,
-    tab: item.label === "Group chat" ? "group" : item.label === "Emergency help" ? "help" : null,
+    tab: item.label === "Group chat" ? "group"
+      : item.label === "Emergency help" ? "help"
+      : item.label === "Itinerary" ? "docs"
+      : item.label === "Hotel & transfers" ? "hotel"
+      : null,
   }));
 
   return (
@@ -695,9 +849,9 @@ function GroupScreen({ session }) {
     }
   }
 
-  function displayName(senderId) {
-    if (senderId === myId) return "You";
-    return senderId?.slice(-6) || "Unknown";
+  function displayName(msg) {
+    if (msg.sender_id === myId) return "You";
+    return msg.sender_name?.split(" ")[0] || "Unknown";
   }
 
   return (
@@ -711,7 +865,7 @@ function GroupScreen({ session }) {
           const mine = msg.sender_id === myId;
           return (
             <div key={msg.id} style={s.bubble(mine)}>
-              {!mine && <div style={s.bubbleSender}>{displayName(msg.sender_id)}</div>}
+              {!mine && <div style={s.bubbleSender}>{displayName(msg)}</div>}
               <div style={s.bubbleText}>{msg.body}</div>
             </div>
           );
@@ -883,7 +1037,7 @@ function HelpScreen() {
 
 // ─── App ─────────────────────────────────────────────────────────────────────
 
-const SCREENS = { home: HomeScreen, group: GroupScreen, docs: DocsScreen, help: HelpScreen };
+const SCREENS = { home: HomeScreen, group: GroupScreen, docs: DocsScreen, help: HelpScreen, hotel: HotelScreen };
 
 export default function App() {
   const [session, setSession] = useState(() => {
@@ -893,6 +1047,7 @@ export default function App() {
   });
   const [activeTab, setActiveTab] = useState("home");
   const [showChangePw, setShowChangePw] = useState(false);
+  const [showChangeName, setShowChangeName] = useState(false);
 
   function signOut() {
     clearSession();
@@ -909,7 +1064,14 @@ export default function App() {
   return (
     <div style={s.app}>
       {showChangePw && <ChangePasswordModal onClose={() => setShowChangePw(false)} />}
-      <Header onSignOut={signOut} onChangePw={() => setShowChangePw(true)} />
+      {showChangeName && (
+        <ChangeNameModal
+          session={session}
+          onClose={() => setShowChangeName(false)}
+          onSave={(updated) => { setSession(updated); setShowChangeName(false); }}
+        />
+      )}
+      <Header onSignOut={signOut} onChangePw={() => setShowChangePw(true)} onChangeName={() => setShowChangeName(true)} />
       <div style={s.scrollArea}>
         <Screen {...screenProps} onTabChange={setActiveTab} />
       </div>

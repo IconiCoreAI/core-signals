@@ -95,10 +95,11 @@ async def get_group_messages(user: dict = Depends(verify_jwt)):
     conn = await get_db()
     rows = await conn.fetch(
         """
-        SELECT id, sender_id, body, created_at
-        FROM messages
-        WHERE channel_type = 'group'
-        ORDER BY created_at ASC
+        SELECT m.id, m.sender_id, t.name AS sender_name, m.body, m.created_at
+        FROM messages m
+        LEFT JOIN travelers t ON t.id = m.sender_id
+        WHERE m.channel_type = 'group'
+        ORDER BY m.created_at ASC
         """
     )
     await conn.close()
