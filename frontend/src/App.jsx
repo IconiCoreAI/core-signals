@@ -434,25 +434,49 @@ function AuthScreen({ onAuth }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
-  const [mode, setMode] = useState("signin");
+  const [mode, setMode] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("reset") ? "reset" : "signin";
+  });
+  const [resetToken] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("reset") || "";
+  });
   const [error, setError] = useState(null);
+  const [message, setMessage] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  function switchMode(next) {
+    setMode(next);
+    setError(null);
+    setMessage(null);
+  }
 
   async function submit(e) {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setMessage(null);
     try {
-      const endpoint = mode === "signup" ? "/auth/signup" : "/auth/signin";
-      const body = mode === "signup"
-        ? { email, password, name }
-        : { email, password };
-      const data = await apiFetch(endpoint, {
-        method: "POST",
-        body: JSON.stringify(body),
-      });
-      saveSession(data.token, data.user);
-      onAuth(data.user);
+      if (mode === "signin" || mode === "signup") {
+        const endpoint = mode === "signup" ? "/auth/signup" : "/auth/signin";
+        const body = mode === "signup" ? { email, password, name } : { email, password };
+        const data = await apiFetch(endpoint, { method: "POST", body: JSON.stringify(body) });
+        saveSession(data.token, data.user);
+        onAuth(data.user);
+      } else if (mode === "forgot") {
+        await apiFetch("/auth/forgot-password", { method: "POST", body: JSON.stringify({ email }) });
+        setMessage("Check your email for a reset link. It expires in 1 hour.");
+      } else if (mode === "reset") {
+        await apiFetch("/auth/reset-password", {
+          method: "POST",
+          body: JSON.stringify({ token: resetToken, new_password: password }),
+        });
+        window.history.replaceState({}, "", "/");
+        setMessage("Password updated! You can now sign in.");
+        setPassword("");
+        setMode("signin");
+      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -465,46 +489,106 @@ function AuthScreen({ onAuth }) {
       <div style={s.authCard}>
         <p style={s.authLogo}>Core Signals</p>
         <p style={s.authSub}>where bucket list dreams come true</p>
-        <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {mode === "signup" && (
-            <input
-              style={s.authInput}
-              type="text"
-              placeholder="Your name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              autoComplete="name"
-            />
-          )}
-          <input
-            style={s.authInput}
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            autoComplete="email"
-          />
-          <input
-            style={s.authInput}
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            autoComplete={mode === "signup" ? "new-password" : "current-password"}
-          />
-          {error && <p style={s.authError}>{error}</p>}
-          <button style={s.authBtn} type="submit" disabled={loading}>
-            {loading ? "…" : mode === "signin" ? "Sign in" : "Create account"}
-          </button>
-        </form>
-        <button
-          style={s.authToggle}
-          onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setError(null); }}
-        >
-          {mode === "signin" ? "No account? Sign up" : "Have an account? Sign in"}
-        </button>
+
+        {mode === "forgot" ? (
+          <>
+            <p style={{ fontSize: 15, fontWeight: 600, color: COLORS.black, margin: "0 0 10px" }}>
+              Reset your password
+            </p>
+            <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <input
+                style={s.authInput}
+                type="email"
+                placeholder="Your email address"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                autoComplete="email"
+              />
+              {error && <p style={s.authError}>{error}</p>}
+              {message && <p style={{ fontSize: 13, color: COLORS.teal, textAlign: "center" }}>{message}</p>}
+              <button style={s.authBtn} type="submit" disabled={loading}>
+                {loading ? "…" : "Send reset link"}
+              </button>
+            </form>
+            <button style={s.authToggle} onClick={() => switchMode("signin")}>
+              Back to sign in
+            </button>
+          </>
+        ) : mode === "reset" ? (
+          <>
+            <p style={{ fontSize: 15, fontWeight: 600, color: COLORS.black, margin: "0 0 10px" }}>
+              Set a new password
+            </p>
+            <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <input
+                style={s.authInput}
+                type="password"
+                placeholder="New password (8+ characters)"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                autoComplete="new-password"
+              />
+              {error && <p style={s.authError}>{error}</p>}
+              <button style={s.authBtn} type="submit" disabled={loading}>
+                {loading ? "…" : "Update password"}
+              </button>
+            </form>
+          </>
+        ) : (
+          <>
+            <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {mode === "signup" && (
+                <input
+                  style={s.authInput}
+                  type="text"
+                  placeholder="Your name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  autoComplete="name"
+                />
+              )}
+              <input
+                style={s.authInput}
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                autoComplete="email"
+              />
+              <input
+                style={s.authInput}
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                autoComplete={mode === "signup" ? "new-password" : "current-password"}
+              />
+              {error && <p style={s.authError}>{error}</p>}
+              {message && <p style={{ fontSize: 13, color: COLORS.teal, textAlign: "center" }}>{message}</p>}
+              <button style={s.authBtn} type="submit" disabled={loading}>
+                {loading ? "…" : mode === "signin" ? "Sign in" : "Create account"}
+              </button>
+            </form>
+            {mode === "signin" && (
+              <button
+                style={{ ...s.authToggle, opacity: 0.6, marginTop: 2 }}
+                onClick={() => switchMode("forgot")}
+              >
+                Forgot password?
+              </button>
+            )}
+            <button
+              style={s.authToggle}
+              onClick={() => switchMode(mode === "signin" ? "signup" : "signin")}
+            >
+              {mode === "signin" ? "No account? Sign up" : "Have an account? Sign in"}
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

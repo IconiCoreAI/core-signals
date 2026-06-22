@@ -1,10 +1,13 @@
 import os
 import uuid
 import hmac
+import asyncio
+import smtplib
 import asyncpg
 import bcrypt
 import jwt
 from datetime import datetime, timedelta
+from email.mime.text import MIMEText
 from fastapi import APIRouter, HTTPException, Depends, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
@@ -14,6 +17,9 @@ JWT_SECRET = os.getenv("JWT_SECRET", "default_jwt_secret")
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_DAYS = 30
 ADMIN_RESET_TOKEN = os.getenv("ADMIN_RESET_TOKEN")
+CONTACT_GMAIL_USER = os.getenv("CONTACT_GMAIL_USER")
+CONTACT_GMAIL_APP_PASSWORD = os.getenv("CONTACT_GMAIL_APP_PASSWORD")
+APP_BASE_URL = "https://bali.escapefromrealitytravel.com"
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 security = HTTPBearer()
@@ -171,6 +177,105 @@ async def update_name(req: UpdateNameRequest, user=Depends(verify_jwt)):
     )
     await conn.close()
     return {"id": row["id"], "email": row["email"], "name": row["name"], "role": row["role"]}
+
+
+def _send_reset_email(to_email: str, name: str, reset_url: str):
+    if not CONTACT_GMAIL_USER or not CONTACT_GMAIL_APP_PASSWORD:
+        return
+    first_name = name.split()[0] if name else "Traveler"
+    body = (
+        f"Hi {first_name},\n\n"
+        f"You requested a password reset for your Bali Retirement Trip app.\n\n"
+        f"Tap the link below to set a new password. It expires in 1 hour.\n\n"
+        f"{reset_url}\n\n"
+        f"If you didn't request this, just ignore this email.\n\n"
+        f"Safe travels,\n"
+        f"Escape From Reality Travel"
+    )
+    msg = MIMEText(body)
+    msg["Subject"] = "Reset your Bali Trip app password"
+    msg["From"] = CONTACT_GMAIL_USER
+    msg["To"] = to_email
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+        smtp.login(CONTACT_GMAIL_USER, CONTACT_GMAIL_APP_PASSWORD)
+        smtp.send_message(msg)
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+@router.post("/forgot-password")
+async def forgot_password(req: ForgotPasswordRequest):
+    email = req.email.lower().strip()
+    conn = await get_db()
+    row = await conn.fetchrow(
+        "SELECT id, email, name, password_hash FROM travelers WHERE email = $1", email
+    )
+    await conn.close()
+
+    # Always 200 — never reveal whether the email exists
+    if not row or not row["password_hash"]:
+        return {"status": "ok"}
+
+    payload = {
+        "sub": row["id"],
+        "fpr": row["password_hash"][-8:],
+        "purpose": "pw_reset",
+        "exp": datetime.utcnow() + timedelta(hours=1),
+    }
+    token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    reset_url = f"{APP_BASE_URL}/?reset={token}"
+
+    try:
+        await asyncio.to_thread(_send_reset_email, row["email"], row["name"], reset_url)
+    except Exception:
+        pass  # email failure must not reveal account existence
+
+    return {"status": "ok"}
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+
+@router.post("/reset-password")
+async def reset_password(req: ResetPasswordRequest):
+    if len(req.new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+
+    try:
+        payload = jwt.decode(req.token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=400, detail="Reset link has expired. Please request a new one.")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=400, detail="Invalid reset link.")
+
+    if payload.get("purpose") != "pw_reset":
+        raise HTTPException(status_code=400, detail="Invalid reset link.")
+
+    user_id = payload.get("sub")
+    fpr = payload.get("fpr")
+
+    conn = await get_db()
+    row = await conn.fetchrow(
+        "SELECT password_hash FROM travelers WHERE id = $1", user_id
+    )
+    if not row or not row["password_hash"]:
+        await conn.close()
+        raise HTTPException(status_code=400, detail="Invalid reset link.")
+
+    if row["password_hash"][-8:] != fpr:
+        await conn.close()
+        raise HTTPException(status_code=400, detail="This reset link has already been used.")
+
+    new_hash = bcrypt.hashpw(req.new_password.encode(), bcrypt.gensalt()).decode()
+    await conn.execute(
+        "UPDATE travelers SET password_hash = $1 WHERE id = $2", new_hash, user_id
+    )
+    await conn.close()
+    return {"status": "password reset"}
 
 
 class AdminResetRequest(BaseModel):
