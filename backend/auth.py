@@ -186,7 +186,7 @@ def _send_reset_email(to_email: str, name: str, reset_url: str):
     body = (
         f"Hi {first_name},\n\n"
         f"You requested a password reset for your Bali Retirement Trip app.\n\n"
-        f"Tap the link below to set a new password. It expires in 1 hour.\n\n"
+        f"Tap the link below to set a new password. It expires in 15 minutes.\n\n"
         f"{reset_url}\n\n"
         f"If you didn't request this, just ignore this email.\n\n"
         f"Safe travels,\n"
@@ -222,7 +222,7 @@ async def forgot_password(req: ForgotPasswordRequest):
         "sub": row["id"],
         "fpr": row["password_hash"][-8:],
         "purpose": "pw_reset",
-        "exp": datetime.utcnow() + timedelta(hours=1),
+        "exp": datetime.utcnow() + timedelta(minutes=15),
     }
     token = jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
     reset_url = f"{APP_BASE_URL}/?reset={token}"
